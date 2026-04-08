@@ -318,6 +318,23 @@ class Handler:
 
         return {}
 
+    def snapshot_resource(self, system_version=None):
+        if system_version is None:
+            system_version = self.version()
+
+        if system_version == 'SCALE':
+            return 'pool/snapshot'
+
+        return 'zfs/snapshot'
+
+    def normalize_volsize(self, size, system_version=None):
+        if system_version is None:
+            system_version = self.version()
+
+        # Keep volume-size coercion in one place so legacy variants can be
+        # handled here later without spreading version checks through the API.
+        return int(size)
+
     # pool/dataset, field=name, value=foo, attr=rawvalue
     def fetch(self, resource, **kwargs):
         results = []
@@ -401,7 +418,7 @@ class Handler:
         return results
 
     def uri_id(self, resource, rid):
-        if resource in ('zfs/snapshot', 'pool/dataset'):
+        if resource in ('zfs/snapshot', 'pool/snapshot', 'pool/dataset'):
             uri = '{resource}/id/{rid}'.format(resource=resource,
                                                rid=rid.replace(self.dataset_divider, self.uri_slash))
         else:
@@ -726,9 +743,9 @@ class Handler:
             self.logger.debug('ZFS dataset has dependents: %s', dataset)
             return True
 
-        snapshots = self.fetch('zfs/snapshot', field='name',
+        snapshots = self.fetch(self.snapshot_resource(), field='name',
                 value='{name}@'.format(name=dataset.get('id')), operator='^',
-                returnBy=list)
+                returnBy=list) or []
 
         for snapshot in snapshots:
             if snapshot.get('holds') or int(snapshot.get('properties').get('numclones').get('value')) > 0:
